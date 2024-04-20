@@ -1,0 +1,2 @@
+This is my project for learning C, networking, concurrency and other concepts that might come up. Application is in a very rough state right now and is barely working.
+My desired goal is to build an application that somebody might consider using in a small group.
