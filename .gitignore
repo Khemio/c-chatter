@@ -1,4 +1,5 @@
 references/
 .vscode/
+build/
 
 *.exe
