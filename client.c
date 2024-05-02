@@ -1,20 +1,18 @@
-#include <netinet/in.h>
-#include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
+// #include <stdio.h>
+// #include <sys/socket.h>
+// #include <arpa/inet.h>
+// #include <stdlib.h>
+// #include <string.h>
+// #include <stdbool.h>
 #include <unistd.h>
-#include <sys/wait.h>
-#include <stdbool.h>
 #include <pthread.h>
+
+#include "utils/includes.h"
 
 void DieWithError(char *errorMessage);
 void handleConnection(int clntSocket);
 void *listenToConn(void * servSock);
 int CreateTCPSocket(char *ip_addr, unsigned short servPort);
-// int ConnectToChat(int servSock);
 
 int main(void)
 {

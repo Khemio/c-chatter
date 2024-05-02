@@ -1,15 +1,17 @@
-#include <netinet/in.h>
-#include <stdio.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/types.h>
+// #include <stdio.h>
+// #include <sys/socket.h>
+// #include <arpa/inet.h>
+// #include <stdlib.h>
+// #include <string.h>
 #include <unistd.h>
-#include <sys/wait.h>
 #include <pthread.h>
 
-#define MAXPENDING 5
+#include "utils/queue.h"
+#include "utils/list.h"
+#include "utils/servUtils.h"
+#include "utils/includes.h"
+
+// #define MAXPENDING 5
 #define THREAD_POOL_SIZE 5
 
 pthread_t threadPool[THREAD_POOL_SIZE];
@@ -22,20 +24,13 @@ pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
 //TODO: Extract utils
 //TODO: Fix warnings
 
-//Issue 1: If every body disconnects server fails to brodcas and shuts down
+/*
+    Issue 1: If every body disconnects, after more then one connection has been established, server fails to brodcast and shuts down
+    Brodcast fails when trying to send a message to disconnected clients
+*/
 //Issue 2: After reconnecting to the server client can recive messages but not send
-
-
-struct queue {
-    int head;
-    int tail;
-    int items[THREAD_POOL_SIZE * 2];
-};
-
-struct Client {
-    int sockfd;
-    char *name;
-};
+//Issue 3: Total (not simultaneous) number of connections cannot exceed THREAD_POOL_SIZE 
+//Issue 4: Clients connected after disconnect will send double messages
 
 struct commArgs {
         struct Client *sender;
@@ -43,29 +38,6 @@ struct commArgs {
         char msg[1024];
 };
 
-struct node {
-    struct node *next;
-    struct node *prev;
-    struct Client *client;
-};
-
-struct list {
-    struct node *head;
-    struct node *tail;
-};
-
-struct queue* initQ(void);
-void enqueue(struct queue *q, int value);
-int dequeue(struct queue *q);
-
-struct list* initL(void);
-void append(struct list *l, struct Client *cl);
-void delete(struct list *l, struct Client *cl);
-
-void DieWithError(char *errorMessage);
-
-int CreateTCPServerSocket(unsigned short servPort);
-int AcceptTCPConnection(int servSock);
 
 void handleTCPClient(struct Client *client, struct list *clients);
 void *handleBrodcast(void *args);
@@ -73,8 +45,6 @@ void *handleBrodcast(void *args);
 void *ThreadMain(void *threadArgs);
 
 struct ThreadArgs {
-    // Shold be a queue
-    // int clntSock;
     struct queue *sockq;
     struct list *clntL;
 };
@@ -112,108 +82,6 @@ int main(int argc, char *argv[]) {
         pthread_mutex_unlock(&qmutex);
            
     }
-}
-
-struct queue* initQ(void) {
-    struct queue *q;
-
-    q = malloc(sizeof(struct queue));
-
-    q->head = 0;
-    q->tail = 0;
-
-    return q;
-}
-
-void enqueue(struct queue *q, int value) {
-    if (q->tail == q->head - 1) {
-        return;
-    }
-
-    q->items[q->tail] = value;
-    q->tail++;
-
-    if (q->tail > THREAD_POOL_SIZE - 1) {
-        q->tail = 0;
-    } else {
-        q->tail++;
-    }
-}
-
-int dequeue(struct queue *q) {
-    if (q-> head == q->tail) {
-        return NULL;
-    }
-
-    int value = q->items[q->head];
-    q->head++;
-
-    return value;
-}
-
-struct list* initL(void) {
-    struct list *l;
-    l = malloc(sizeof(struct list));
-
-    l->head = NULL;
-    l->tail = NULL;
-
-    return l;
-}
-
-void append(struct list *l, struct Client *cl) {
-    // printf("append()\n");
-    struct node *n;
-    n = malloc(sizeof(struct node));
-
-    n->client = cl;
-    n->next = NULL;
-    n->prev = NULL;
-    // printf("node -> client -> socket: %d\n", n->client.sockfd);
-
-    if (l->head == NULL) {
-        l->head = l->tail = n;
-    } else {
-        n->prev = l->tail;
-        l->tail->next = n;
-        l->tail = n;
-    }
-}
-
-void delete(struct list *l, struct Client *cl) {
-    // Do error handling and messaging
-    struct node *curr = l->head;
-    while (curr && curr->client->sockfd != cl->sockfd) {
-        // if (curr->next == NULL) return;
-
-        curr = curr->next;     
-    }
-
-    if (curr == NULL) return;
-
-    if (l->head == curr) {
-        l->head = curr->next;
-        curr->next->prev = NULL;
-    }
-
-    if (l->tail == curr) {
-        l->tail = curr->prev;
-        curr->prev->next = NULL;
-    }
-
-    curr->prev->next = curr->next;
-    curr->next->prev = curr->prev;
-
-    free(curr);
-}
-
-// void destroyL(struct list l) {
-
-// }
-
-void DieWithError(char *errorMessage) {
-    fprintf(stderr, "%s\n", errorMessage);
-    exit(1);
 }
 
 #define RCVBUFSIZE 128
@@ -279,50 +147,10 @@ void handleTCPClient(struct Client *client, struct list *clients) {
             curr = curr->next;
         } 
     }
+    printf("out of loop");
 
+    // deleteI(clients, client);
     close(client->sockfd);
-}
-
-int CreateTCPServerSocket(unsigned short servPort) {
-    int servSock;
-    struct sockaddr_in echoServAddr;
-
-    if ((servSock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-        DieWithError("socket() failed");
-    }
-
-    /* Construct local addres structure */
-    memset(&echoServAddr, 0, sizeof(echoServAddr));             // Zero out the structure
-    echoServAddr.sin_family = AF_INET;                                 // Internet address family
-    echoServAddr.sin_port = htons(servPort);            // Local port
-    echoServAddr.sin_addr.s_addr = htonl(INADDR_ANY)  ;      // Any incoming interface
-
-    if (bind(servSock, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0) {
-        DieWithError("bind() failed");
-    }
-
-    if (listen(servSock, MAXPENDING) < 0) {
-        DieWithError("listen() failed");
-    }
-
-    return servSock;
-}
-
-int AcceptTCPConnection(int servSock) {
-    int clntSock;
-    struct sockaddr_in echoClntAddr;
-    unsigned int clntLen;                   /* Lenghth of the client address data structure */
-
-    /* Set the size of the in-out parameter */
-        clntLen = sizeof(echoClntAddr);
-
-        if ((clntSock = accept(servSock, (struct sockaddr *) &echoClntAddr, &clntLen)) < 0) {
-            DieWithError("accept() failed");
-        }
-
-    printf("Handling client %s\n", inet_ntoa(echoClntAddr.sin_addr));
-
-    return clntSock;
 }
 
 // Run forever and take clients from queue
