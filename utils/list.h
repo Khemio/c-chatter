@@ -17,4 +17,4 @@ struct list {
 struct list* initL(void);
 void append(struct list *l, struct Client *cl);
 void deleteI(struct list *l, struct Client *cl);
-void destroyL(struct list l);
+void destroyL(struct list *l);

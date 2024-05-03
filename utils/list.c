@@ -29,11 +29,9 @@ void append(struct list *l, struct Client *cl) {
 }
 
 void deleteI(struct list *l, struct Client *cl) {
-    // Do error handling and messaging
+    // Do error handling and messaging, chek for memory leaks
     struct node *curr = l->head;
     while (curr && curr->client->sockfd != cl->sockfd) {
-        // if (curr->next == NULL) return;
-
         curr = curr->next;     
     }
 
@@ -41,12 +39,18 @@ void deleteI(struct list *l, struct Client *cl) {
 
     if (l->head == curr) {
         l->head = curr->next;
-        curr->next->prev = NULL;
+        if (curr->next != NULL) curr->next->prev = NULL;
+
+        free(curr);
+        return;
     }
 
     if (l->tail == curr) {
         l->tail = curr->prev;
-        curr->prev->next = NULL;
+        if (curr->prev != NULL) curr->prev->next = NULL;;
+        
+        free(curr);
+        return;
     }
 
     curr->prev->next = curr->next;
@@ -55,6 +59,14 @@ void deleteI(struct list *l, struct Client *cl) {
     free(curr);
 }
 
-void destroyL(struct list l) {
+void destroyL(struct list *l) {
+    struct node *curr;
+    while (l->head) {
+        curr = l->head; 
+        l->head = l->head->next;
+        free(curr);    
+    }
 
+    l->head = l->tail = NULL;
+    free(l);
 }

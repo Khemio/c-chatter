@@ -1,8 +1,4 @@
-// #include <stdio.h>
-// #include <sys/socket.h>
-// #include <arpa/inet.h>
-// #include <stdlib.h>
-// #include <string.h>
+#include <string.h>
 #include <unistd.h>
 #include <pthread.h>
 
@@ -24,13 +20,7 @@ pthread_cond_t cond_var = PTHREAD_COND_INITIALIZER;
 //TODO: Extract utils
 //TODO: Fix warnings
 
-/*
-    Issue 1: If every body disconnects, after more then one connection has been established, server fails to brodcast and shuts down
-    Brodcast fails when trying to send a message to disconnected clients
-*/
-//Issue 2: After reconnecting to the server client can recive messages but not send
-//Issue 3: Total (not simultaneous) number of connections cannot exceed THREAD_POOL_SIZE 
-//Issue 4: Clients connected after disconnect will send double messages
+//Issue 1: Total (not simultaneous) number of connections cannot exceed THREAD_POOL_SIZE 
 
 struct commArgs {
         struct Client *sender;
@@ -137,7 +127,7 @@ void handleTCPClient(struct Client *client, struct list *clients) {
         struct node *curr = args->clients->head;
 
         while (curr != NULL) {
-            if (curr->client->sockfd != args->sender->sockfd) {
+            if (curr->client->sockfd != args->sender->sockfd && recvMsgSize > 0) {
 
                 if (send(curr->client->sockfd, args->msg, msgSize, 0) < 0) {
                     DieWithError("brodcast send() failed");
@@ -147,9 +137,9 @@ void handleTCPClient(struct Client *client, struct list *clients) {
             curr = curr->next;
         } 
     }
-    printf("out of loop");
+    // printf("out of loop");
 
-    // deleteI(clients, client);
+    deleteI(clients, client);
     close(client->sockfd);
 }
 
